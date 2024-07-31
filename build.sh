@@ -1,4 +1,4 @@
-#/bin/bash
+#!/bin/bash
 
 if [[ "$1" == "all" ]];then
   $0 linux amd64
