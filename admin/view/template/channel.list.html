@@ -106,7 +106,7 @@
                 <div class="form-group">
                     <label class="col-sm-3 control-label">ChannelName：</label>
                     <div class="col-sm-9">
-                        <input type="text" name="ChannelName" id="ChannelName" class="form-control" placeholder="ChannelName"> <span class="help-block m-b-none">* 字母,30个字母以内</span>
+                        <input type="text" name="ChannelName" id="ChannelName" class="form-control" placeholder="ChannelName"> <span class="help-block m-b-none">* 字母,100个字母以内</span>
                     </div>
                 </div>
                 <div class="form-group">
@@ -147,7 +147,7 @@
     $("#addNewChannelBtn").click(
             function(){
                 var ChannelName = $("#ChannelName").val();
-                if(ChannelName=="" || ChannelName.length > 30){
+                if(ChannelName=="" || ChannelName.length > 100){
                     $("#ChannelName").focus();
                     return false;
                 }
