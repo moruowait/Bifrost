@@ -102,6 +102,9 @@ func (mc *mysqlConn) readNumber(nr uint8) (uint64, error) {
 	var n, add int
 	var e error
 	for e == nil && n < int(nr) {
+		if mc.bufReader == nil {
+			return 0, errors.New("invalid buffer reader, Connection maybe closed")
+		}
 		add, e = mc.bufReader.Read(buf[n:])
 		n += add
 	}
