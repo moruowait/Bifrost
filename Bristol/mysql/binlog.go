@@ -261,10 +261,18 @@ func (This *BinlogDump) startConnAndDumpBinlog() {
 	go func() {
 		// 这里使用defer 是担心DumBinlog 方法异常了，导致需要重连的情况下，而不是 checkDumpConnection 里发现连接异常了
 		defer cancelFun()
-		if This.parser.isGTID == false {
-			This.mysqlConn.DumpBinlog(This.parser, This.CallbackFun)
-		} else {
-			This.mysqlConn.DumpBinlogGtid(This.parser, This.CallbackFun)
+		defer func() {
+			if err := recover(); err != nil {
+				log.Println("startConnAndDumpBinlog err:", err)
+				return
+			}
+		}()
+		if This.mysqlConn != nil {
+			if This.parser.isGTID == false {
+				This.mysqlConn.DumpBinlog(This.parser, This.CallbackFun)
+			} else {
+				This.mysqlConn.DumpBinlogGtid(This.parser, This.CallbackFun)
+			}
 		}
 	}()
 	<-ctx.Done()
