@@ -17,15 +17,16 @@ package server
 
 import (
 	"fmt"
-	"github.com/brokercap/Bifrost/Bristol/mysql"
-	"github.com/brokercap/Bifrost/config"
-	pluginDriver "github.com/brokercap/Bifrost/plugin/driver"
-	"github.com/brokercap/Bifrost/server/count"
 	"log"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/brokercap/Bifrost/Bristol/mysql"
+	"github.com/brokercap/Bifrost/config"
+	pluginDriver "github.com/brokercap/Bifrost/plugin/driver"
+	"github.com/brokercap/Bifrost/server/count"
 )
 
 func evenTypeName(e mysql.EventType) string {
@@ -72,6 +73,14 @@ func (This *consume_channel_obj) checkChannleStatus() {
 }
 
 func (This *consume_channel_obj) sendToServerResult(ToServerInfo *ToServer, pluginData *pluginDriver.PluginDataType) {
+	if ToServerInfo == nil {
+		log.Printf("Error: Received nil ToServerInfo in sendToServerResult")
+		return
+	}
+	if pluginData == nil {
+		log.Printf("Error: Received nil pluginData in sendToServerResult for server %+v", ToServerInfo)
+		return
+	}
 	ToServerInfo.Lock()
 	status := ToServerInfo.Status
 	FileQueueStatus := ToServerInfo.FileQueueStatus
@@ -103,9 +112,15 @@ func (This *consume_channel_obj) sendToServerResult(ToServerInfo *ToServer, plug
 		go ToServerInfo.consume_to_server(This.db, pluginData.SchemaName, pluginData.TableName)
 	}
 	ToServerInfo.Unlock()
+
 	if ToServerInfo.LastBinlogKey == nil {
 		ToServerInfo.LastBinlogKey = getToServerLastBinlogkey(This.db, ToServerInfo)
+		if ToServerInfo.LastBinlogKey == nil {
+			log.Printf("Error: LastBinlogKey is nil for db:%s schema:%s table:%s", This.db.Name, pluginData.SchemaName, pluginData.TableName)
+			return
+		}
 	}
+
 	saveBinlogPositionByCache(ToServerInfo.LastBinlogKey, lastQueueBinlog)
 	if FileQueueStatus {
 		ToServerInfo.InitFileQueue(This.db.Name, pluginData.SchemaName, pluginData.TableName)
@@ -149,6 +164,20 @@ func (This *consume_channel_obj) sendToServerResult(ToServerInfo *ToServer, plug
 			break
 		}
 	} else {
+		ToServerInfo.Lock()
+		if ToServerInfo.ToServerChan == nil {
+			ToServerInfo.ToServerChan = &ToServerChan{
+				To: make(chan *pluginDriver.PluginDataType, 1000),
+			}
+		}
+		ToServerInfo.Unlock()
+
+		// Check after initialization
+		if ToServerInfo.ToServerChan == nil || ToServerInfo.ToServerChan.To == nil {
+			log.Printf("Error: Failed to initialize ToServerChan for server %+v\n", ToServerInfo)
+			return
+		}
+
 		ToServerInfo.ToServerChan.To <- pluginData
 		ToServerInfo.Lock()
 		ToServerInfo.QueueMsgCount++
@@ -158,7 +187,19 @@ func (This *consume_channel_obj) sendToServerResult(ToServerInfo *ToServer, plug
 }
 
 func (This *consume_channel_obj) transferToPluginData(data *mysql.EventReslut) (pluginData *pluginDriver.PluginDataType) {
+	if data == nil {
+		log.Printf("Error: Received nil EventReslut in transferToPluginData")
+		return nil
+	}
+	if data.BinlogFileName == "" {
+		log.Printf("Error: Empty BinlogFileName in EventReslut")
+		return nil
+	}
 	i := strings.IndexAny(data.BinlogFileName, ".")
+	if i == -1 {
+		log.Printf("Error: Invalid BinlogFileName format: %s", data.BinlogFileName)
+		return nil
+	}
 	intString := data.BinlogFileName[i+1:]
 	BinlogFileNum, _ := strconv.Atoi(intString)
 	pluginData = &pluginDriver.PluginDataType{
@@ -197,18 +238,20 @@ func (This *consume_channel_obj) consumeChannel() {
 			if This.db.killStatus == 1 {
 				return
 			}
+			if pluginData == nil {
+				log.Printf("Warning: Received nil pluginData in channel %s", c.Name)
+				continue
+			}
+
 			This.checkChannleStatus()
 
 			switch pluginData.EventType {
 			case "update":
 				countNum = int64(len(pluginData.Rows) / 2)
-				break
 			case "sql", "commit":
 				countNum = 0
-				break
 			default:
 				countNum = int64(len(pluginData.Rows))
-				break
 			}
 			EventSize = int64(pluginData.EventSize)
 
@@ -267,6 +310,10 @@ func (This *consume_channel_obj) sendToServerList(key string, pluginData *plugin
 	if t == nil {
 		return
 	}
+	if pluginData == nil || pluginData.TableName == "" {
+		log.Printf("Warning: Invalid pluginData or TableName in sendToServerList for key: %s", key)
+		return
+	}
 	if This.checkIgnoreTable(t, pluginData.TableName) == false {
 		if len(t.ToServerList) > 0 {
 			This.sendToServerList0(t.ToServerList, pluginData)
@@ -291,7 +338,16 @@ func (This *consume_channel_obj) sendToServerList(key string, pluginData *plugin
 }
 
 func (This *consume_channel_obj) sendToServerList0(toServerList []*ToServer, pluginData *pluginDriver.PluginDataType) {
+	if toServerList == nil || pluginData == nil {
+		log.Printf("Warning: nil toServerList or pluginData in sendToServerList0")
+		return
+	}
+
 	for _, toServerInfo := range toServerList {
+		if toServerInfo == nil {
+			log.Printf("Warning: nil toServerInfo in sendToServerList0")
+			continue
+		}
 		if toServerInfo.FilterQuery && pluginData.EventType == "sql" {
 			if pluginData.Query != "COMMIT" {
 				continue
