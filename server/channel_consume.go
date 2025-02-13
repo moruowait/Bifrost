@@ -164,13 +164,13 @@ func (This *consume_channel_obj) sendToServerResult(ToServerInfo *ToServer, plug
 			break
 		}
 	} else {
-		ToServerInfo.Lock()
 		if ToServerInfo.ToServerChan == nil {
+			ToServerInfo.Lock()
 			ToServerInfo.ToServerChan = &ToServerChan{
 				To: make(chan *pluginDriver.PluginDataType, 1000),
 			}
+			ToServerInfo.Unlock()
 		}
-		ToServerInfo.Unlock()
 
 		// Check after initialization
 		if ToServerInfo.ToServerChan == nil || ToServerInfo.ToServerChan.To == nil {
