@@ -463,6 +463,9 @@ func (This *ToServer) consume_to_server(db *db,SchemaName string,TableName strin
 				if This.QueueMsgCount == 0 {
 					// 在全量任务的时候，有可能是起多个消费者,所以这里要判断一下，是不是只剩下一个消费者，只有一个消费者的时候的时候,再将 chan 关闭
 					if This.ThreadCount == 1 {
+						if This.ToServerChan != nil && This.ToServerChan.To != nil {
+							close(This.ToServerChan.To)
+						}
 						This.ToServerChan = nil
 						This.Status = ""
 					}
